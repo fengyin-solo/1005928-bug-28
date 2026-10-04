@@ -63,6 +63,58 @@
       </tbody>
     </table>
 
+    <section class="ledger-block">
+      <h3>备件待领用台账</h3>
+      <p class="section-hint">
+        备件出库结论由备品备件页在销账事务中同步写入；待办 {{ pendingLedgerCount }} 单、已出库 {{ issuedLedgerCount }} 单。
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>缺陷编号</th>
+            <th>领用单号</th>
+            <th>备件</th>
+            <th>数量</th>
+            <th>库位</th>
+            <th>申请人</th>
+            <th>出库结论</th>
+            <th>销账时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in ledger" :key="entry.code" :class="{ 'low-row': entry.lowAfterIssue }">
+            <td>{{ entry.defectCode }}</td>
+            <td>{{ entry.code }}</td>
+            <td>{{ entry.spareCode }} {{ entry.spareName }}</td>
+            <td class="num">{{ entry.quantity }}</td>
+            <td>{{ entry.warehouse }}</td>
+            <td>{{ entry.applicant }}</td>
+            <td>
+              <span :class="entry.status === 'issued' ? 'conclusion-done' : 'conclusion-pending'">
+                {{ entry.status === 'issued' ? '已出库（账面已扣减）' : requisitionLabels[entry.status] }}
+              </span>
+              <span v-if="entry.status === 'issued' && entry.lowAfterIssue" class="low-tag">扣后低于安全存量</span>
+            </td>
+            <td>{{ entry.syncedAt || '—' }}</td>
+          </tr>
+          <tr v-if="!ledger.length">
+            <td colspan="8" class="empty-state">暂无关联缺陷的领用单；在备品备件页发起领用并填写缺陷编号后会自动同步到这里</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="ledger-block low-block">
+      <h3>低于安全存量品类 <span class="low-count">{{ lowStock.length }} 类</span></h3>
+      <p class="section-hint">与备品备件页使用同一核定口径（{{ safetyVersion }}），两处品类完全一致。</p>
+      <div class="low-chips">
+        <span v-for="spare in lowStock" :key="spare.id" class="low-chip">
+          {{ spare.code }} {{ spare.name }}：现有 <strong>{{ spare.onHand }}</strong> / 安全存量 {{ spare.safetyStock }}
+        </span>
+        <span v-if="!lowStock.length" class="section-hint">当前没有低于安全存量的品类。</span>
+      </div>
+    </section>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条缺陷消缺记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -80,6 +132,13 @@ import {
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import { CURRENT_SAFETY_VERSION } from '@/data/spare/catalog'
+import {
+  REQUISITION_LABELS,
+  lowStockSpares,
+  requisitionLedger,
+} from '@/data/spare/service'
+import type { Spare } from '@/data/spare/types'
 
 const meta = moduleMeta('defect')
 const columns = ["缺陷编号", "缺陷类别", "发现方式", "严重等级", "责任班组", "要求完成日", "消缺措施", "消缺状态"]
@@ -92,6 +151,14 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const safetyVersion = CURRENT_SAFETY_VERSION
+const requisitionLabels = REQUISITION_LABELS
+const ledger = ref(requisitionLedger())
+const lowStock = ref<Spare[]>(lowStockSpares())
+const pendingLedgerCount = computed(
+  () => ledger.value.filter((entry) => entry.status !== 'issued' && entry.status !== 'rejected').length,
+)
+const issuedLedgerCount = computed(() => ledger.value.filter((entry) => entry.status === 'issued').length)
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +195,8 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    ledger.value = requisitionLedger()
+    lowStock.value = lowStockSpares()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '缺陷消缺列表读取失败'
   }
@@ -135,3 +204,18 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.ledger-block { margin-top: 20px; }
+.ledger-block h3 { margin: 0 0 4px; font-size: 15px; }
+.section-hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.num { text-align: right; }
+.low-row { background: #fff7f5; }
+.conclusion-done { color: #175c3b; font-weight: 600; }
+.conclusion-pending { color: #b54708; }
+.low-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: 11px; }
+.low-count { font-size: 12px; color: #b42318; font-weight: 400; }
+.low-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.low-chip { background: #fef3f2; border: 1px solid #fda29b; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #7a271a; }
+.low-chip strong { color: #b42318; }
+</style>

@@ -36,3 +36,12 @@ export type OverviewResult = {
   cards: { label: string; value: number }[]
   modules: { name: string; created: number; pending: number; abnormal: number }[]
 }
+
+// 登录身份：保管人绑定具体库位，站长与作业班组不绑定库位。
+export type OperatorRole = 'keeper' | 'manager' | 'crew'
+
+export type OperatorProfile = {
+  name: string
+  role: OperatorRole
+  warehouse: string
+}
