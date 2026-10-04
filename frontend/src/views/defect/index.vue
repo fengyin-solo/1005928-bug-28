@@ -63,6 +63,68 @@
       </tbody>
     </table>
 
+    <section class="sub-ledger">
+      <h3>消缺待领用台账（与备品备件出库同步）</h3>
+      <p class="page-desc">备件办理领用并填写缺陷编号后，出库结论同步到这里；确认领用后在台账销项。</p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>领用单号</th><th>备件编号</th><th>备件名称</th><th>领用数量</th>
+            <th>领用人</th><th>关联缺陷编号</th><th>出库时间</th><th>台账状态</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in requisitions" :key="String(item.id)" :class="{ 'row-done': item['台账状态'] === '已领用' }">
+            <td>{{ item['领用单号'] }}</td>
+            <td>{{ item['备件编号'] }}</td>
+            <td>{{ item['备件名称'] || '—' }}</td>
+            <td>{{ item['领用数量'] }}</td>
+            <td>{{ item['领用人'] }}</td>
+            <td>{{ item['关联缺陷编号'] || '—' }}</td>
+            <td>{{ item['出库时间'] }}</td>
+            <td>{{ item['台账状态'] }}</td>
+            <td>
+              <button
+                v-if="item['台账状态'] === '待领用'"
+                class="link"
+                type="button"
+                @click="confirmLedger(item)"
+              >
+                确认领用
+              </button>
+              <span v-else class="muted-text">已销项</span>
+            </td>
+          </tr>
+          <tr v-if="!requisitions.length">
+            <td colspan="9" class="empty-state">暂无待领用记录，备件出库关联缺陷编号后会同步到这里</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="sub-ledger">
+      <h3>低于安全存量品类（与库存页同口径）</h3>
+      <p class="page-desc">该清单由备品备件台账按同一版安全存量核定计算，两处品类保持一致，便于消缺备件预警。</p>
+      <table class="data-table">
+        <thead>
+          <tr><th>备件编号</th><th>备件名称</th><th>适用设备</th><th>现有数量</th><th>安全存量</th><th>缺口</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in lowStock" :key="String(item.id)">
+            <td>{{ item['备件编号'] }}</td>
+            <td>{{ item['备件名称'] }}</td>
+            <td>{{ item['适用设备'] }}</td>
+            <td class="alarm">{{ item['现有数量'] }}</td>
+            <td>{{ item['安全存量'] }}</td>
+            <td>{{ Number(item['安全存量']) - Number(item['现有数量']) }}</td>
+          </tr>
+          <tr v-if="!lowStock.length">
+            <td colspan="6" class="empty-state">当前没有低于安全存量的品类</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条缺陷消缺记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -79,6 +141,11 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import {
+  confirmRequisition,
+  listRequisitions,
+  lowStockSpares,
+} from '@/api/spare-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('defect')
@@ -92,12 +159,29 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const requisitions = ref<EntryRow[]>([])
+const lowStock = ref<EntryRow[]>([])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+
+function loadLinkedLedgers() {
+  requisitions.value = listRequisitions()
+  lowStock.value = lowStockSpares()
+}
+
+function confirmLedger(item: EntryRow) {
+  errorMessage.value = ''
+  const result = confirmRequisition(Number(item.id))
+  if (!result.ok) {
+    errorMessage.value = result.message
+    return
+  }
+  loadLinkedLedgers()
+}
 
 function resetFilters() {
   filters.value = {}
@@ -128,6 +212,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    loadLinkedLedgers()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '缺陷消缺列表读取失败'
   }

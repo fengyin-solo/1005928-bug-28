@@ -65,7 +65,16 @@ npm run build
 
 - 每个模块的页面在 `frontend/src/views/<模块>/index.vue`，页面只负责渲染，读写统一走
   `frontend/src/api/local-service.ts`。
+- 备品备件有独立领域服务 `frontend/src/api/spare-service.ts`：找件排序、领用出库、检验放行、
+  库位权限、盘点补账都在那里判断，备件页不做业务判断。办理领用时扣账面（`spare`）与写领用
+  流水（`requisition`，即缺陷消缺页的「待领用台账」）在同一笔批量提交里完成，校验不过整笔回退。
+- 现有数量以最近一次盘点（`stocktake` 台账）为基线补起；安全存量统一按定额版本 `2026-V1`
+  核定，历史记录里对不上数字的定额按默认定额兜底。首次经服务层读取时做一次性结构迁移，
+  迁移标记存在 `pv-plant-ops:meta`。
 - 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
   `frontend/src/data/seed.ts`。
-- 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
-- 想回到初始数据：清掉浏览器里 `pv-plant-ops:entries` 这一项，或调用 `resetModule(模块)`。
+- 状态流转只允许在 `local-service.ts` / `spare-service.ts` 里改，页面组件不做业务判断。
+- 想回到初始数据：清掉浏览器里 `pv-plant-ops:entries` 与 `pv-plant-ops:meta` 两项，
+  或调用 `resetModule(模块)`。
+- 备件业务规则有一份无依赖验证脚本：`frontend/scripts/verify-spare.mjs`（24 项检查，
+  用 esbuild 打包到 Node 运行，覆盖盘点补账、找件分页、出库扣减、检验/权限拦截与台账同源）。

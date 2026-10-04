@@ -27,6 +27,19 @@ export type PageResult = {
   size: number
 }
 
+// 备品备件的分页查询：额外携带排序方向，便于页面在翻页时保持「现有数量从少到多」。
+export type SpareQuery = {
+  filters?: Record<string, string>
+  page?: number
+  size?: number
+  sortByQuantity?: 'asc' | 'desc'
+}
+
+export type SparePageResult = PageResult & {
+  sortByQuantity: 'asc' | 'desc'
+  size: number
+}
+
 export type ActionResult = {
   ok: boolean
   message: string
